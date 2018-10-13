@@ -30,23 +30,41 @@ def auth_user(cursor, username, password):
   # return whether there was a result or not
   return bool(cursor.fetchall())
 
-def connect_db(sqluser="dbadmin", host="localhost", db="auth"):
+
+def connect_db(sqluser="dbadmin", host="localhost", db_name="auth"):
   """
   Attempt to connect to an existing database. If it doesn't exist, it creates it.
   """
+  db = mysql.connector.connect(user=sqluser, host=host, db=db_name)
+  cur = db.cursor()
+
   try:
-    db = mysql.connector.connect(user=sqluser, host=host, db=db)
-    cur = db.cursor()
+    cur.execute("SHOW TABLES WHERE Tables_in_" + db_name + "='users';")
+    if cur.fetchall():
+      # table exists. database is all set
+      return db
+
   except mysql.connector.errors.ProgrammingError:
-    db = mysql.connector.connect(user=sqluser, host=host)
-    cur = db.cursor()
-    cur.execute("CREATE DATABASE " + db)
-    cur.execute("USE " + db)
+    cur.execute("CREATE DATABASE " + db_name)
+    cur.execute("USE " + db_name)
+
+  # piece together the sql command to create the table
+  cmd    = "CREATE TABLE users ("
+  user   = "username varchar(128) NOT NULL, "
+  passwd = "password char(64) NOT NULL, "
+  salt   = "salt char(64) NOT NULL, "
+  key    = "PRIMARY KEY (`username`)) "
+  etc    = "ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+
+  # create the auth table
+  cur.execute(cmd + user + passwd + salt + key + etc)
   return db
 
 
 def main(argv):
   db = connect_db()
+
+  cur = db.cursor()
   
   try:
     while True:
@@ -58,26 +76,32 @@ def main(argv):
         user = input('Username: ')
         if len(user) < 3:
           print("Username must be at least 3 characters long")
+          continue
         
         pw = getpass.getpass()
         if len(pw) < 8:
           print("Password must be at least 8 characters long")
-          return False
+          continue
         
         confirm = getpass.getpass('Confirm Password: ')
         if confirm != pw:
           print("Passwords do not match")
+          continue
         
         if add_user(db, cur, user, pw):
           print("Account successfully created")
+          continue
       
       elif cmd[0] == "login":
         user = input('Username: ')
         pw = getpass.getpass()
         if auth_user(cur, user, pw):
           print("Access Granted")
+          continue
+
         else:
           print("Access Denied")
+          continue
       
       elif cmd[0] == "exit":
         return
@@ -85,6 +109,10 @@ def main(argv):
       else:
         print("Unknown Command '" + cmd[0] + "'")
         print("Valid Commands are 'create' and 'login'")
+
+  except EOFError:
+    print("Bye")
+    return
 
   finally:
     # Close the database no matter what happens

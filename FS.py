@@ -1,6 +1,7 @@
 import os
 import sys
 import socket
+import auth_db
 import hashlib
 import threading
 
@@ -86,23 +87,20 @@ def rput(client, filename, user):
   send(client, b'250')
   return
 
-def connection(client):
+
+def connection(cursor, client):
   """Thread worker function"""
 
   # Authentication
   send(client, b'330')
 
   username = client.recv(BUFFER_SIZE).decode("utf-8")
-  if username not in user_info:
-    send(client, b'430')
-    client.close()
-    return
 
   send(client, b'331')
 
   pw = client.recv(BUFFER_SIZE)
 
-  if hashlib.sha256(pw).hexdigest() != user_info[username]:
+  if not auth_db.auth_user(cursor, username, pw):
     send(client, b'430')
     client.close()
     return
@@ -140,23 +138,27 @@ def main(argv):
   #threads = []
   global TCP_PORT
 
-  with socket.socket() as server:
-    while True:
-      try:
-        server.bind((TCP_IP, TCP_PORT))
-        break
-      except OSError:
-        TCP_PORT += 1
-    
-    server.listen()
-    print("TCP Server listens at: " + str(TCP_IP) + ":" + str(TCP_PORT))
-    
-    while True:
-      client, addr = server.accept()
-      print("Connection recieved from: " + str(addr[0]) + ":" + str(addr[1]))
-      t = threading.Thread(target=connection, args=[client])
-      #threads.append(t)
-      t.start()
+  db = auth_db.connect_db()
+  try:
+    with socket.socket() as server:
+      while True:
+        try:
+          server.bind((TCP_IP, TCP_PORT))
+          break
+        except OSError:
+          TCP_PORT += 1
+      
+      server.listen()
+      print("TCP Server listens at: " + str(TCP_IP) + ":" + str(TCP_PORT))
+      
+      while True:
+        client, addr = server.accept()
+        print("Connection recieved from: " + str(addr[0]) + ":" + str(addr[1]))
+        t = threading.Thread(target=connection, args=[db.cursor(), client])
+        #threads.append(t)
+        t.start()
+  finally:
+    db.close()
 
 if __name__ == "__main__":
   main(sys.argv)

@@ -4,7 +4,6 @@ import random
 import getpass
 import mysql.connector
 
-
 def add_user(db, cursor, username, password):
   # check if username already exists
   cursor.execute("SELECT username FROM users WHERE username=%s;", (username,))
@@ -31,16 +30,24 @@ def auth_user(cursor, username, password):
   # return whether there was a result or not
   return bool(cursor.fetchall())
 
-def main(argv):
+def connect_db(sqluser="dbadmin", host="localhost", db="auth"):
+  """
+  Attempt to connect to an existing database. If it doesn't exist, it creates it.
+  """
   try:
-    db = mysql.connector.connect(user="dbadmin", host="localhost", db="auth")
+    db = mysql.connector.connect(user=sqluser, host=host, db=db)
     cur = db.cursor()
   except mysql.connector.errors.ProgrammingError:
-    db = mysql.connector.connect(user="dbadmin", host="localhost")
+    db = mysql.connector.connect(user=sqluser, host=host)
     cur = db.cursor()
-    cur.execute("CREATE DATABASE auth")
-    cur.execute("USE auth")
-    
+    cur.execute("CREATE DATABASE " + db)
+    cur.execute("USE " + db)
+  return db
+
+
+def main(argv):
+  db = connect_db()
+  
   try:
     while True:
       cmd = input('> ')
@@ -80,6 +87,7 @@ def main(argv):
         print("Valid Commands are 'create' and 'login'")
 
   finally:
+    # Close the database no matter what happens
     db.close()
 
 if __name__ == "__main__":
